@@ -14,13 +14,16 @@ No pip installs needed — stdlib only.
 """
 
 import os
+import re
 import sys
 import json
 import argparse
 import textwrap
+from html import escape as html_escape
+from typing import Optional, List, Tuple, Dict, Any
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
-from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, quote
 
 # ---------------------------------------------------------------------------
 # Configuration — all from environment variables
@@ -98,7 +101,27 @@ def _check_env():
         sys.exit(1)
 
 
-def api(method: str, endpoint: str, data: dict | None = None) -> dict | list | None:
+def _validate_id(value: str, name: str = "ID") -> str:
+    """
+    Validate that an ID doesn't contain path-injection characters.
+    
+    Args:
+        value: The ID string to validate.
+        name:  Human-readable name for error messages.
+    
+    Returns:
+        The validated ID.
+    
+    Raises:
+        SystemExit if validation fails.
+    """
+    if "/" in value or "\\" in value or ".." in value:
+        print(red(f"Invalid {name}: contains illegal characters"), file=sys.stderr)
+        sys.exit(1)
+    return value
+
+
+def api(method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Optional[Any]:
     """
     Make an authenticated request to the Plane API.
 
@@ -113,6 +136,12 @@ def api(method: str, endpoint: str, data: dict | None = None) -> dict | list | N
     _check_env()
 
     url = f"{BASE_URL}/api/v1{endpoint}"
+    
+    # Defense-in-depth: ensure we only make HTTP(S) requests (Semgrep audit)
+    if not url.startswith(("http://", "https://")):
+        print(red(f"Invalid URL scheme: {url}"), file=sys.stderr)
+        sys.exit(1)
+    
     headers = {
         "X-API-Key": API_KEY,
         "Content-Type": "application/json",
@@ -122,7 +151,7 @@ def api(method: str, endpoint: str, data: dict | None = None) -> dict | list | N
     req = Request(url, data=body, headers=headers, method=method)
 
     try:
-        with urlopen(req) as resp:
+        with urlopen(req, timeout=30) as resp:
             if resp.status == 204:
                 return None
             return json.loads(resp.read().decode())
@@ -134,6 +163,12 @@ def api(method: str, endpoint: str, data: dict | None = None) -> dict | list | N
         except (json.JSONDecodeError, ValueError):
             pass
         print(red(f"API Error {e.code}:") + f" {error_body}", file=sys.stderr)
+        sys.exit(1)
+    except URLError as e:
+        print(red(f"Connection error: {e.reason}"), file=sys.stderr)
+        sys.exit(1)
+    except TimeoutError:
+        print(red("Request timed out (30s). The Plane API may be unreachable."), file=sys.stderr)
         sys.exit(1)
 
 
@@ -178,7 +213,7 @@ def _priority_str(val) -> str:
     return color_fn(label)
 
 
-def _print_table(rows: list[dict], columns: list[tuple[str, str, int]]):
+def _print_table(rows: List[Dict[str, Any]], columns: List[Tuple[str, str, int]]):
     """
     Print a list of dicts as an aligned table.
 
@@ -190,8 +225,8 @@ def _print_table(rows: list[dict], columns: list[tuple[str, str, int]]):
 
     # Build string matrix
     header = [h for _, h, _ in columns]
-    lines: list[list[str]] = []
-    raw_lines: list[list[str]] = []  # without color for width calc
+    lines: List[List[str]] = []
+    raw_lines: List[List[str]] = []  # without color for width calc
 
     for row in rows:
         cells = []
@@ -244,9 +279,17 @@ def format_output(data, format_type: str = "table"):
         print(json.dumps(data, indent=2))
         return
 
+    # Check for pagination and warn user
+    has_more = False
+    if isinstance(data, dict):
+        if data.get("next") or data.get("next_page_offset") or data.get("next_cursor"):
+            has_more = True
+
     # Unwrap paginated responses
     if isinstance(data, dict) and "results" in data:
         data = data["results"]
+        if has_more:
+            print(yellow("⚠ More results available (pagination not yet supported)"), file=sys.stderr)
 
     if isinstance(data, list):
         if not data:
@@ -320,6 +363,7 @@ def cmd_projects_list(args):
 
 def cmd_projects_get(args):
     """Get details for a specific project."""
+    _validate_id(args.project, "project ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/")
     format_output(data, args.format)
 
@@ -340,6 +384,7 @@ def cmd_projects_create(args):
 
 def cmd_issues_list(args):
     """List work items in a project, with optional filters."""
+    _validate_id(args.project, "project ID")
     endpoint = f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/"
     params = {}
     if args.state:
@@ -356,15 +401,18 @@ def cmd_issues_list(args):
 
 def cmd_issues_get(args):
     """Get full details of a single work item."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/{args.issue}/")
     format_output(data, args.format)
 
 
 def cmd_issues_create(args):
     """Create a new work item in a project."""
+    _validate_id(args.project, "project ID")
     payload = {"name": args.name}
     if args.description:
-        payload["description_html"] = f"<p>{args.description}</p>"
+        payload["description_html"] = f"<p>{html_escape(args.description)}</p>"
     if args.priority:
         priorities = {"urgent": 1, "high": 2, "medium": 3, "low": 4, "none": 0}
         payload["priority"] = priorities.get(args.priority.lower(), 3)
@@ -382,11 +430,13 @@ def cmd_issues_create(args):
 
 def cmd_issues_update(args):
     """Update fields on an existing work item."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
     payload = {}
     if args.name:
         payload["name"] = args.name
     if args.description:
-        payload["description_html"] = f"<p>{args.description}</p>"
+        payload["description_html"] = f"<p>{html_escape(args.description)}</p>"
     if args.priority:
         priorities = {"urgent": 1, "high": 2, "medium": 3, "low": 4, "none": 0}
         payload["priority"] = priorities.get(args.priority.lower(), 3)
@@ -404,6 +454,10 @@ def cmd_issues_update(args):
 
 def cmd_issues_assign(args):
     """Assign a work item to one or more members."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
+    for assignee in args.assignees:
+        _validate_id(assignee, "assignee ID")
     payload = {"assignees": args.assignees}
     data = api("PATCH", f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/{args.issue}/", payload)
     print(green(f"✓ Assigned to {len(args.assignees)} member(s)"))
@@ -412,13 +466,16 @@ def cmd_issues_assign(args):
 
 def cmd_issues_delete(args):
     """Delete a work item (irreversible)."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
     api("DELETE", f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/{args.issue}/")
     print(green(f"✓ Deleted work item {args.issue}"))
 
 
 def cmd_issues_search(args):
     """Search work items across the entire workspace."""
-    endpoint = f"/workspaces/{WORKSPACE}/search/?search={args.query}&type=work_item"
+    params = urlencode({"search": args.query, "type": "work_item"})
+    endpoint = f"/workspaces/{WORKSPACE}/search/?{params}"
     data = api("GET", endpoint)
     format_output(data, args.format)
 
@@ -429,6 +486,8 @@ def cmd_issues_search(args):
 
 def cmd_comments_list(args):
     """List comments on a work item."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
     endpoint = f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/{args.issue}/activities/"
     data = api("GET", endpoint)
 
@@ -466,8 +525,10 @@ def cmd_comments_list(args):
 
 def cmd_comments_add(args):
     """Add a comment to a work item."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.issue, "issue ID")
     payload = {
-        "comment_html": f"<p>{args.body}</p>",
+        "comment_html": f"<p>{html_escape(args.body)}</p>",
     }
     data = api("POST", f"/workspaces/{WORKSPACE}/projects/{args.project}/work-items/{args.issue}/activities/", payload)
     print(green("✓ Comment added"))
@@ -481,18 +542,22 @@ def cmd_comments_add(args):
 
 def cmd_cycles_list(args):
     """List cycles (sprints) in a project."""
+    _validate_id(args.project, "project ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/cycles/")
     format_output(data, args.format)
 
 
 def cmd_cycles_get(args):
     """Get details for a specific cycle."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.cycle, "cycle ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/cycles/{args.cycle}/")
     format_output(data, args.format)
 
 
 def cmd_cycles_create(args):
     """Create a new cycle in a project."""
+    _validate_id(args.project, "project ID")
     payload = {"name": args.name}
     if args.start:
         payload["start_date"] = args.start
@@ -509,18 +574,22 @@ def cmd_cycles_create(args):
 
 def cmd_modules_list(args):
     """List modules in a project."""
+    _validate_id(args.project, "project ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/modules/")
     format_output(data, args.format)
 
 
 def cmd_modules_get(args):
     """Get details for a specific module."""
+    _validate_id(args.project, "project ID")
+    _validate_id(args.module, "module ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/modules/{args.module}/")
     format_output(data, args.format)
 
 
 def cmd_modules_create(args):
     """Create a new module in a project."""
+    _validate_id(args.project, "project ID")
     payload = {"name": args.name}
     if args.description:
         payload["description"] = args.description
@@ -539,12 +608,14 @@ def cmd_modules_create(args):
 
 def cmd_states_list(args):
     """List workflow states in a project."""
+    _validate_id(args.project, "project ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/states/")
     format_output(data, args.format)
 
 
 def cmd_labels_list(args):
     """List labels in a project."""
+    _validate_id(args.project, "project ID")
     data = api("GET", f"/workspaces/{WORKSPACE}/projects/{args.project}/labels/")
     format_output(data, args.format)
 
