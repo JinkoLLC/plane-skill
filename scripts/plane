@@ -14,16 +14,14 @@ No pip installs needed — stdlib only.
 """
 
 import os
-import re
 import sys
 import json
 import argparse
-import textwrap
 from html import escape as html_escape
 from typing import Optional, List, Tuple, Dict, Any
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode
 
 # ---------------------------------------------------------------------------
 # Configuration — all from environment variables
