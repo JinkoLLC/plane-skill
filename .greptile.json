@@ -1,0 +1,10 @@
+{
+  "triggerOnUpdates": true,
+  "strictness": 3,
+  "commentTypes": ["logic", "syntax"],
+  "statusCheck": true,
+  "fixWithAI": true,
+  "excludeAuthors": ["dependabot[bot]"],
+  "ignorePatterns": "tests/\n*.test.*\n*.spec.*\n*.config.*\n*.lock\npackage-lock.json\nyarn.lock\nuv.lock\npnpm-lock.yaml",
+  "instructions": "Focus on security vulnerabilities and functionality issues. Enforce YAGNI (You Aren't Gonna Need It) - flag unnecessary abstractions, premature optimizations, or features beyond the PR scope. Enforce KISS (Keep It Simple, Stupid) - flag overly complex solutions when simpler alternatives exist. Flag any hardcoded credentials, secrets, or sensitive data. Flag potential injection vulnerabilities (SQL, command, XSS)."
+}
