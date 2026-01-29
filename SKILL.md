@@ -1,12 +1,23 @@
 ---
 name: plane
 description: "Manage Plane.so projects and work items using the `plane` CLI. List projects, create/update/search issues, manage cycles and modules, add comments, and assign members."
-metadata: {"moltbot":{"requires":{"bins":["python3"],"env":["PLANE_API_KEY","PLANE_WORKSPACE"]},"primaryEnv":"PLANE_API_KEY","emoji":"✈️","homepage":"https://github.com/JinkoLLC/plane-skill"}}
+metadata: {"moltbot":{"requires":{"bins":["plane"],"env":["PLANE_API_KEY","PLANE_WORKSPACE"]},"primaryEnv":"PLANE_API_KEY","emoji":"✈️","homepage":"https://github.com/JinkoLLC/plane-skill","install":[{"id":"github","kind":"download","url":"https://raw.githubusercontent.com/JinkoLLC/plane-skill/main/scripts/plane","targetDir":"~/.local/bin/","bins":["plane"],"label":"Download plane CLI from GitHub"}]}}
 ---
 
 # Plane Skill
 
 Interact with [Plane.so](https://plane.so) project management via the `plane` CLI.
+
+## Installation
+
+Download the CLI script and make it executable:
+
+```bash
+curl -o ~/.local/bin/plane https://raw.githubusercontent.com/JinkoLLC/plane-skill/main/scripts/plane
+chmod +x ~/.local/bin/plane
+```
+
+Make sure `~/.local/bin` is in your PATH.
 
 ## Setup
 
