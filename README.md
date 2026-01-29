@@ -136,4 +136,4 @@ The CLI is a single Python script (`scripts/plane`) that wraps the [Plane.so RES
 
 ## License
 
-[MIT](LICENSE) © 2026 [Jinko LLC](https://github.com/Jinko-LLC)
+[MIT](LICENSE) © 2026 [Jinko LLC](https://github.com/JinkoLLC)

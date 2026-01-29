@@ -1,7 +1,7 @@
 ---
 name: plane
 description: "Manage Plane.so projects and work items using the `plane` CLI. List projects, create/update/search issues, manage cycles and modules, add comments, and assign members."
-metadata: {"moltbot":{"requires":{"bins":["python3"],"env":["PLANE_API_KEY","PLANE_WORKSPACE"]},"primaryEnv":"PLANE_API_KEY","emoji":"✈️","homepage":"https://github.com/Jinko-LLC/plane-skill"}}
+metadata: {"moltbot":{"requires":{"bins":["python3"],"env":["PLANE_API_KEY","PLANE_WORKSPACE"]},"primaryEnv":"PLANE_API_KEY","emoji":"✈️","homepage":"https://github.com/JinkoLLC/plane-skill"}}
 ---
 
 # Plane Skill
