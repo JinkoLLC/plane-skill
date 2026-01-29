@@ -124,16 +124,6 @@ plane issues list -p PROJECT_ID --assignee USER_ID
 
 The CLI is a single Python script (`scripts/plane`) that wraps the [Plane.so REST API v1](https://developers.plane.so/). It uses only Python standard library modules (`urllib`, `json`, `argparse`) — no pip installs needed.
 
-## Contributing
-
-1. Fork the repo
-2. Create your feature branch (`git checkout -b feature/amazing-thing`)
-3. Make your changes — keep it stdlib-only!
-4. Test that `python3 scripts/plane --help` works
-5. Commit (`git commit -am 'Add amazing thing'`)
-6. Push (`git push origin feature/amazing-thing`)
-7. Open a Pull Request
-
 ## License
 
 [MIT](LICENSE) © 2026 [Jinko LLC](https://github.com/JinkoLLC)
